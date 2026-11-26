@@ -25,7 +25,13 @@ Nothing is announced while the revisions (`at`) already agree. Only two kinds of
 | Situation | Notice | Then |
 | --- | --- | --- |
 | Saving and pushing while the local revision is older | A bottom-right alert: "Push failed: the synced copy already moved to revision N. Reload to take the newer value." | The local value stays on screen but no longer overwrites the shared copy; the reload picks the shared one up |
-| Booting while the local revision is older | "Restored N keys from the synced copy (the local values were older)." | Already on the shared value |
+| Booting while the local revision is older | "Restored N keys from the synced copy (the local values were older)." Press "Details" to list which keys changed, their new revision, and a per-field diff of JSON values (`theme: "light" → "solar"`) | Already on the shared value |
+| Same, but you want the local value | Press "Overwrite" on the push-failure alert | That key takes the local value even though the synced revision moved on; the alert turns into "Overwrote N keys" |
+
+A push failure does **not** spam the corner: a key is announced once per synced revision, a later
+message for the same key updates the existing card instead of stacking a second one, and pressing
+"Overwrite" swaps the card's buttons. The notice language comes from the `language` option
+(`auto` asks the browser, then the DSH locale, then falls back to English; `zh`/`en` pin it).
 
 Conflicts are decided on the write path: a batch carries `base` (the `at` each value was written
 on), the Host answers `conflicts` for keys that moved on, the client resends once against the fresh
