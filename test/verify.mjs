@@ -1,5 +1,5 @@
 /**
- * Offline verification for @local/dsh-localstate-sync.
+ * Offline verification for @leonhoy/dsh-localstate-sync.
  *
  * Run from the package root: node test/verify.mjs
  *
@@ -58,7 +58,7 @@ function fakeContext() {
     fiber: {
       entry: {
         id: 'localstate-sync',
-        name: '@local/dsh-localstate-sync',
+        name: '@leonhoy/dsh-localstate-sync',
         options: { config: { includePrefixes: ['dsh.'], maxBytes: 262144, maxKeys: 2000, injectSnapshot: true, capture: true } },
       },
     },
@@ -254,7 +254,7 @@ check('seeder keeps a newer local value', skipped.map.get('dsh.keybindings.v1') 
 
 // ---------------------------------------------------------------- client bundle
 const clientText = readFileSync(join(import.meta.dirname, '..', 'client.js'), 'utf8')
-check('client registers under the package name', clientText.includes("id: '@local/dsh-localstate-sync'"))
+check('client registers under the package name', clientText.includes("id: '@leonhoy/dsh-localstate-sync'"))
 check('client patches the three storage methods', ['setItem', 'removeItem', 'clear'].every((name) => clientText.includes(`${name}: proto.${name}`)))
 check('client flushes on pagehide with a beacon', clientText.includes("addEventListener('pagehide'") && clientText.includes('sendBeacon'))
 check('client skips file:// origins', clientText.includes("location.protocol === 'file:'"))
@@ -311,7 +311,7 @@ sandbox.window = sandbox
 sandbox.addEventListener = () => {}
 sandbox.removeEventListener = () => {}
 runInContext(clientText, createContext(sandbox))
-check('client bundle registers itself with the loader', loaded.definition?.id === '@local/dsh-localstate-sync', loaded.definition?.id)
+check('client bundle registers itself with the loader', loaded.definition?.id === '@leonhoy/dsh-localstate-sync', loaded.definition?.id)
 
 const ReactShim = {
   createElement: (type, props, ...children) => ({ type, props: props ?? {}, children }),
@@ -337,7 +337,7 @@ const injectCall = cells.find((entry) => entry.name === 'plugins.bundle.config')
 check('client injects into the bundle config slot', injectCall !== undefined, cells.map((entry) => entry.name))
 injectCall.callback()
 const cell = cells.find((entry) => entry.definition !== undefined)
-check('config cell is keyed by the package name', cell?.definition.name === 'plugins.bundle.config' && cell?.definition.key === '@local/dsh-localstate-sync', cell?.definition)
+check('config cell is keyed by the package name', cell?.definition.name === 'plugins.bundle.config' && cell?.definition.key === '@leonhoy/dsh-localstate-sync', cell?.definition)
 check('config cell exposes a component', typeof cell.Component === 'function')
 const rendered = cell.Component({ view: 'page' })
 check('config form renders its loading state', rendered.type === 'p', rendered.type)

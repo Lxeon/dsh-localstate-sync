@@ -37,7 +37,7 @@ English: [docs/en.md](docs/en.md)
 ```yaml
 - insert:
     - id: localstate-sync
-      name: '@local/dsh-localstate-sync'
+      name: '@leonhoy/dsh-localstate-sync'
       config:
         includePrefixes: ['dsh.']   # 采集这些前缀的键
         includeExact: []            # 额外采集的完整键名

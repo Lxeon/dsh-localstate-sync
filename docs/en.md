@@ -39,7 +39,7 @@ Open this bundle's card on the **Plugins** page and the form renders inside it (
 ```yaml
 - insert:
     - id: localstate-sync
-      name: '@local/dsh-localstate-sync'
+      name: '@leonhoy/dsh-localstate-sync'
       config:
         includePrefixes: ['dsh.']   # collect keys with these prefixes
         includeExact: []            # extra exact keys

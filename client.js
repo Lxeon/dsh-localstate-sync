@@ -1,5 +1,5 @@
 window.__ModuleLoader__.load({
-  id: '@local/dsh-localstate-sync',
+  id: '@leonhoy/dsh-localstate-sync',
   factory(require) {
     var React = require('react')
     var META_KEY = '__dsh.localstate.meta.v1'
@@ -90,7 +90,7 @@ window.__ModuleLoader__.load({
       if (typeof config.capture === 'boolean') state.capture = config.capture
     }
 
-    var BUNDLE_NAME = '@local/dsh-localstate-sync'
+    var BUNDLE_NAME = '@leonhoy/dsh-localstate-sync'
     var CONFIG_EVENT = 'dsh-localstate:config-changed'
     var CONFIG_ROUTE = 'api/localstate.config.v1'
     var FORM_CSS = [
@@ -369,7 +369,7 @@ window.__ModuleLoader__.load({
           alive.value = true
           if (globalThis.__DSH_LOCALSTATE_CONFIG_CSS__ !== true) {
             var style = document.createElement('style')
-            style.setAttribute('data-plugin-css', '@local/dsh-localstate-sync/client-form')
+            style.setAttribute('data-plugin-css', '@leonhoy/dsh-localstate-sync/client-form')
             style.textContent = FORM_CSS
             document.head.appendChild(style)
             globalThis.__DSH_LOCALSTATE_CONFIG_CSS__ = true

@@ -1,7 +1,6 @@
 {
-  "name": "@local/dsh-localstate-sync",
+  "name": "@leonhoy/dsh-localstate-sync",
   "version": "0.2.0",
-  "private": true,
   "type": "module",
   "description": "Persist browser localStorage state into a JSON file under the DSH home and restore it before the page boots.",
   "dependencies": {
@@ -27,6 +26,7 @@
     "docs",
     "icon.svg",
     "README.md",
+    "LICENSE",
     "test",
     "market"
   ],
@@ -44,12 +44,25 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/Lxeon/dsh-localstate-sync.git"
+    "url": "git+https://github.com/Lxeon/dsh-localstate-sync.git"
   },
   "homepage": "https://github.com/Lxeon/dsh-localstate-sync",
   "author": "Lxeon",
   "scripts": {
     "verify": "node test/verify.mjs",
     "market": "node market/build-index.mjs"
-  }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "MIT",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "localstorage",
+    "sync",
+    "browser-state",
+    "config"
+  ]
 }

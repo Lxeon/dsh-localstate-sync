@@ -1,6 +1,6 @@
 - insert:
     - id: localstate-sync
-      name: '@local/dsh-localstate-sync'
+      name: '@leonhoy/dsh-localstate-sync'
       config:
         includePrefixes:
           - 'dsh.'

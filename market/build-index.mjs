@@ -1,8 +1,10 @@
 #!/usr/bin/env node
-// Regenerate market/index.json from package.json, the current git HEAD, and icon.svg.
+// Regenerate market/index.json from package.json, the npm registry, and icon.svg.
 //
-// The market format pins one exact commit per version, so the index has to be rebuilt
-// (and pushed) every time the plugin is released. Run: node market/build-index.mjs
+// A version is described by one exact source: the npm release when that version is on the
+// registry, otherwise a pinned git commit (the market format does not accept a floating
+// branch). Rebuild and push the index every time the plugin is released.
+// Run: npm run market
 //
 // Value constraints come from @deepseek-ai/dsh-plugin-market-index: an exact SemVer
 // version, an integer publishTimestamp in Unix seconds, a lowercase 40-hex commit, and
@@ -19,12 +21,35 @@ const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8'
 if (pkg.dsh?.bundle === undefined) throw new Error('package.json must declare dsh.bundle, or the entry is not installable')
 
 const commit = git('rev-parse', 'HEAD')
-const publishTimestamp = Number(git('log', '-1', '--format=%ct'))
+const gitTimestamp = Number(git('log', '-1', '--format=%ct'))
 // The index is read by other machines, so the URL comes from package.json (the public
 // repository), never from this checkout's git remote, which may point somewhere private.
 const remote = String(process.env.LSYNC_REPO_URL ?? pkg.repository?.url ?? '').replace(/\.git$/, '')
 if (remote === '') throw new Error('package.json must declare repository.url, or set LSYNC_REPO_URL to the public repository')
 const icon = `data:image/svg+xml;base64,${readFileSync(join(root, 'icon.svg')).toString('base64')}`
+
+// Prefer the npm release: it is what the registry-based markets ingest, and it needs no
+// commit pin. Fall back to a pinned commit when this version is not published yet.
+async function npmRelease(name, version) {
+  const url = `https://registry.npmjs.org/${name.replace('/', '%2f')}`
+  try {
+    const response = await fetch(url, { headers: { accept: 'application/json' } })
+    if (!response.ok) return undefined
+    const doc = await response.json()
+    const published = doc.time?.[version]
+    if (typeof published !== 'string') return undefined
+    const seconds = Math.floor(Date.parse(published) / 1000)
+    if (!Number.isInteger(seconds) || seconds <= 0) return undefined
+    return { publishTimestamp: seconds, source: { type: 'npm' } }
+  } catch {
+    return undefined
+  }
+}
+
+const release = (await npmRelease(pkg.name, pkg.version)) ?? {
+  publishTimestamp: gitTimestamp,
+  source: { type: 'git', url: `${remote}.git`, commit },
+}
 
 const index = {
   format: 1,
@@ -58,8 +83,8 @@ const index = {
       versions: [
         {
           version: pkg.version,
-          publishTimestamp,
-          source: { type: 'git', url: `${remote}.git`, commit },
+          publishTimestamp: release.publishTimestamp,
+          source: release.source,
           engines: pkg.engines?.dsh === undefined ? {} : { dsh: pkg.engines.dsh },
         },
       ],
@@ -70,4 +95,5 @@ const index = {
 const out = join(root, 'market', 'index.json')
 writeFileSync(out, `${JSON.stringify(index, null, 2)}\n`)
 console.log(`wrote ${out}`)
-console.log(`  ${pkg.name}@${pkg.version} -> ${commit.slice(0, 8)} (${new Date(publishTimestamp * 1000).toISOString()})`)
+const where = release.source.type === 'npm' ? 'npm registry' : `git ${commit.slice(0, 8)}`
+console.log(`  ${pkg.name}@${pkg.version} -> ${where} (${new Date(release.publishTimestamp * 1000).toISOString()})`)

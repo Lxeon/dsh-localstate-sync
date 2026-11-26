@@ -22,7 +22,7 @@
   },
   "plugins": [
     {
-      "name": "@local/dsh-localstate-sync",
+      "name": "@leonhoy/dsh-localstate-sync",
       "title": {
         "en": "Browser state sync",
         "zh": "浏览器状态同步"
@@ -50,11 +50,11 @@
       "versions": [
         {
           "version": "0.2.0",
-          "publishTimestamp": 1795697625,
+          "publishTimestamp": 1795698558,
           "source": {
             "type": "git",
             "url": "https://github.com/Lxeon/dsh-localstate-sync.git",
-            "commit": "d10e795ef38f230260d1a4d4deb8127ea1668b6b"
+            "commit": "70300b11e453aaabc1290439676e658e5654aa11"
           },
           "engines": {
             "dsh": "^0.2.2-rc.5"
