@@ -37,8 +37,10 @@ node market/build-index.mjs        # 或 npm run market
 
 | 托管 | 索引直链 |
 |---|---|
-| GitHub 公开仓库 | `https://raw.githubusercontent.com/Lxeon/dsh-localstate-sync/main/market/index.json` |
+| GitHub 公开仓库 | `https://raw.githubusercontent.com/Lxeon/dsh-localstate-sync/refs/heads/main/market/index.json` |
 | GitHub Pages / 任意静态站 | 指向 `market/index.json` 的 https 直链 |
+
+> 用 `refs/heads/main` 形态而不是 `main`：后者是 `raw.githubusercontent.com` 的 CDN 缓存（`max-age=300`），刚推完几分钟内可能还是旧内容；`refs/heads/main` 每次取最新。
 
 仓库若是 private，`raw.githubusercontent.com` 会返回 404，Discover 报
 `plugin-market/fetch-failed`，安装也会失败——索引和安装两头都断。

@@ -101,7 +101,7 @@ dsh plugin --profile web add git+https://github.com/Lxeon/dsh-localstate-sync.gi
 ```
 
 或者把插件市场索引
-`https://raw.githubusercontent.com/Lxeon/dsh-localstate-sync/main/market/index.json`
+`https://raw.githubusercontent.com/Lxeon/dsh-localstate-sync/refs/heads/main/market/index.json`
 加到 **Plugins → Discover → Add index source**。
 
 本地开发用 **Plugins → Add plugin** 选择本目录，或调用 `plugin_manager` 的 `install_bundle`。
