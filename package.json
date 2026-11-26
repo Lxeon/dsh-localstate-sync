@@ -1,6 +1,6 @@
 {
   "name": "@leonhoy/dsh-localstate-sync",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "type": "module",
   "description": "Persist browser localStorage state into a JSON file under the DSH home and restore it before the page boots.",
   "dependencies": {

@@ -83,6 +83,19 @@ No reload is needed after changing the allowlist: a successful form save dispatc
 - The form registers on the `plugins.bundle.config` slot, keyed by the package name. On a host without a `slots` service (rare) the form does not appear; capture and restore are unaffected.
 - Conflicts are detected on **write** only. There is no live cross-tab or cross-browser push (no `storage` listener), so the two sides converge on the next load; within one conflict the side that resends last wins — this is not a merge algorithm.
 
+## Releasing (maintainer)
+
+Releases go through GitHub Actions **trusted publishing**: no token, no one-time password, the runner
+exchanges an OIDC identity for the right to publish.
+
+1. npmjs.com → the package → Settings → Trusted Publisher → GitHub Actions: `Organization or user:
+   Lxeon`, `Repository: dsh-localstate-sync`, `Workflow filename: release.yml`, Environment empty.
+2. Bump `version` in `package.json`, run `npm run market`, commit and push.
+3. `git tag v0.3.2 && git push origin v0.3.2` — `.github/workflows/release.yml` runs the self-check,
+   verifies the tag matches `package.json`, then `npm publish` (with provenance).
+
+Re-run by hand: Actions → release → Run workflow.
+
 ## Install
 
 Use **Plugins → Add plugin** and pass this directory, or call `plugin_manager` `install_bundle` with it.

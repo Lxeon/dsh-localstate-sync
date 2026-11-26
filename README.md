@@ -80,6 +80,18 @@ English: [docs/en.md](docs/en.md)
 - 配置表单注册在 `plugins.bundle.config` slot 上，键名就是包名。宿主若没有 `slots` 服务（极少见），表单不出现，采集与恢复不受影响。
 - 冲突只在**写入**时判定。没有跨标签页/跨浏览器的实时推送（不监听 `storage` 事件），两边要下次加载才收敛；同一次冲突里保留的那方由重发顺序决定，不是合并算法。
 
+## 发布（维护者）
+
+发布走 GitHub Actions 的 **trusted publishing**：没有 token、没有一次性密码，靠 OIDC 直接换发布权。
+
+1. npmjs.com → 该包 → Settings → Trusted Publisher → GitHub Actions，填
+   `Organization or user: Lxeon`、`Repository: dsh-localstate-sync`、`Workflow filename: release.yml`、Environment 留空。
+2. 改 `package.json` 的 `version` → `npm run market` 重建索引 → 提交推送。
+3. 打标签并推：`git tag v0.3.2 && git push origin v0.3.2`；`.github/workflows/release.yml` 会跑自检、
+   校验 tag 与 `package.json` 一致，然后 `npm publish`，顺带生成 provenance。
+
+手动重跑：Actions → release → Run workflow（`workflow_dispatch`）。
+
 ## 安装
 
 公开安装（按固定提交钉版本）：

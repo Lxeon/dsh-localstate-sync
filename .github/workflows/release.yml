@@ -1,0 +1,47 @@
+name: release
+
+# Publishes to npm through the trusted-publisher (OIDC) relationship, so no token
+# and no one-time password is involved. Register this file on npm first:
+#   npmjs.com → package → Settings → Trusted Publisher → GitHub Actions
+#     Organization or user: Lxeon
+#     Repository:           dsh-localstate-sync
+#     Workflow filename:    release.yml
+#     Environment:          (leave empty)
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # required for the OIDC exchange with the npm registry
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      # Trusted publishing needs npm >= 11.5.1; the runner image ships an older one.
+      - run: npm install --global npm@latest
+      - run: npm --version
+
+      - run: npm ci
+      - run: npm run verify
+
+      - name: Check the tag matches package.json
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          pkg="v$(node -p "require('./package.json').version")"
+          if [ "$pkg" != "$GITHUB_REF_NAME" ]; then
+            echo "tag $GITHUB_REF_NAME does not match package.json $pkg" >&2
+            exit 1
+          fi
+
+      - run: npm publish --access public
