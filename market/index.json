@@ -33,9 +33,9 @@
       },
       "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzNiIgaGVpZ2h0PSIzNiIgdmlld0JveD0iMCAwIDM2IDM2Ij4KICA8cmVjdCB4PSIzIiB5PSI4IiB3aWR0aD0iMTgiIGhlaWdodD0iMTUiIHJ4PSIzIiBmaWxsPSJub25lIiBzdHJva2U9IiMxZjhhNzAiIHN0cm9rZS13aWR0aD0iMiIvPgogIDxwYXRoIGQ9Ik0zIDEzaDE4IiBmaWxsPSJub25lIiBzdHJva2U9IiMxZjhhNzAiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPGNpcmNsZSBjeD0iNi41IiBjeT0iMTAuNSIgcj0iMSIgZmlsbD0iIzFmOGE3MCIvPgogIDxjaXJjbGUgY3g9IjEwIiBjeT0iMTAuNSIgcj0iMSIgZmlsbD0iIzFmOGE3MCIvPgogIDxwYXRoIGQ9Ik0yNiA5djE3IiBmaWxsPSJub25lIiBzdHJva2U9IiMxZjhhNzAiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTIxLjUgMjEuNSAyNiAyNmw0LjUtNC41IiBmaWxsPSJub25lIiBzdHJva2U9IiMxZjhhNzAiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+Cjwvc3ZnPgo=",
       "author": "Lxeon",
-      "homepage": "https://github.com/Lxeon/dsh-localstate-sync",
+      "homepage": "git+https://github.com/Lxeon/dsh-localstate-sync",
       "repository": {
-        "url": "https://github.com/Lxeon/dsh-localstate-sync"
+        "url": "git+https://github.com/Lxeon/dsh-localstate-sync"
       },
       "metadata": {
         "category": "ui",
@@ -50,11 +50,11 @@
       "versions": [
         {
           "version": "0.2.0",
-          "publishTimestamp": 1795698558,
+          "publishTimestamp": 1795705154,
           "source": {
             "type": "git",
-            "url": "https://github.com/Lxeon/dsh-localstate-sync.git",
-            "commit": "70300b11e453aaabc1290439676e658e5654aa11"
+            "url": "git+https://github.com/Lxeon/dsh-localstate-sync.git",
+            "commit": "7108f6e3fbd7b9aab11ec56f936293d715a7616c"
           },
           "engines": {
             "dsh": "^0.2.2-rc.5"
