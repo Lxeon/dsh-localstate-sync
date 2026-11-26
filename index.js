@@ -216,7 +216,8 @@ export function apply(ctx, config) {
       }
       const changes = body !== null && typeof body === 'object' ? body.changes : undefined
       const base = body !== null && typeof body === 'object' ? body.base : undefined
-      const result = store.applyChanges(changes, base)
+      const force = body !== null && typeof body === 'object' ? body.force : undefined
+      const result = store.applyChanges(changes, base, force)
       if (result.ok === false) {
         log('warn', `[localstate-sync] rejected a browser batch: ${result.reason}`)
         return jsonResponse(typeof result.status === 'number' ? result.status : 400, result)

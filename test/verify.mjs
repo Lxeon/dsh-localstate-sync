@@ -132,6 +132,16 @@ const goneAt = clash.snapshot().keys['dsh.gone2'].at
 clash.applyChanges({ 'dsh.gone2': null }, { 'dsh.gone2': goneAt })
 const onTombstone = clash.applyChanges({ 'dsh.gone2': 'resurrect' }, { 'dsh.gone2': goneAt })
 check('a tombstone also conflicts on a stale base', onTombstone.accepted.length === 0 && onTombstone.conflicts[0].value === null && onTombstone.conflicts[0].current > goneAt, onTombstone.conflicts[0])
+const forcedAt = clash.snapshot().keys['dsh.shared'].at
+const forced = clash.applyChanges({ 'dsh.shared': 'forced-local' }, { 'dsh.shared': forcedAt - 5 }, { 'dsh.shared': true })
+check('a forced write ignores a stale base', forced.ok === true && forced.accepted.length === 1 && forced.conflicts.length === 0, forced)
+check('the forced write landed on the host', clash.snapshot().keys['dsh.shared'].v === 'forced-local', clash.snapshot().keys['dsh.shared'])
+const halfForced = clash.applyChanges(
+  { 'dsh.shared': 'half' , 'dsh.other': 'clean' },
+  { 'dsh.shared': clash.snapshot().keys['dsh.shared'].at - 5, 'dsh.other': 0 },
+  { 'dsh.other': true },
+)
+check('force only covers the keys it names', halfForced.accepted.length === 1 && halfForced.accepted[0][0] === 'dsh.other' && halfForced.conflicts[0].key === 'dsh.shared', halfForced)
 const legacy = clash.applyChanges({ 'dsh.legacy': 'no-base-sent' })
 check('a batch without base still applies (old clients)', legacy.ok === true && legacy.accepted.length === 1 && legacy.conflicts.length === 0, legacy)
 clash.flush()
@@ -238,7 +248,7 @@ function runSeeder(globalValue, seed) {
   const globalThisStub = { __DSH_LOCALSTATE__: globalValue }
   const run = new Function('globalThis', 'localStorage', seederBody)
   run(globalThisStub, localStorage)
-  return { map, applied: globalThisStub.__DSH_LOCALSTATE_APPLIED__ }
+  return { map, applied: globalThisStub.__DSH_LOCALSTATE_APPLIED__, list: globalThisStub.__DSH_LOCALSTATE_APPLIED_LIST__ }
 }
 
 const seeded = runSeeder(
@@ -254,6 +264,17 @@ const skipped = runSeeder(
   { 'dsh.keybindings.v1': '{"submit":"newer-local"}', '__dsh.localstate.meta.v1': JSON.stringify({ seq: 9, at: { 'dsh.keybindings.v1': 6 } }) },
 )
 check('seeder keeps a newer local value', skipped.map.get('dsh.keybindings.v1') === '{"submit":"newer-local"}' && skipped.applied === 0, skipped.applied)
+check(
+  'seeder reports what it changed, with the value it replaced',
+  Array.isArray(seeded.list) &&
+    seeded.list.length === 2 &&
+    seeded.list[0][0] === 'dsh.keybindings.v1' &&
+    seeded.list[0][1] === 4 &&
+    seeded.list[0][2] === '{"submit":"Enter"}' &&
+    seeded.list[0][3] === '{"submit":"Mod+Enter"}' &&
+    seeded.list[1][3] === null,
+  seeded.list,
+)
 
 // ---------------------------------------------------------------- client bundle
 const clientText = readFileSync(join(import.meta.dirname, '..', 'client.js'), 'utf8')
@@ -384,6 +405,11 @@ sandbox.localStorage.setItem('dsh.probe', 'local-2')
 await sleep(520)
 const thirdPost = posts()[2]
 check('after a failed push the base stays stale, so only a reload can pull', thirdPost !== undefined && bodyOf(thirdPost).base['dsh.probe'] === 7, thirdPost && bodyOf(thirdPost).base)
+
+sandbox.localStorage.setItem('dsh.probe', 'local-3')
+await sleep(520)
+const repeatedErrors = (sandbox.__DSH_LOCALSTATE_NOTICES__ ?? []).filter((entry) => entry.kind === 'error')
+check('the same stalled revision is announced once, not on every write', repeatedErrors.length === 1, repeatedErrors.map((entry) => entry.text))
 
 // ---------------------------------------------------------------- boot notice
 const bootSites = new Map()

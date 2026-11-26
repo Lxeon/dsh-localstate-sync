@@ -265,11 +265,14 @@ export function createStore(config) {
      * @param base - optional `{ key: number }` of the revisions the browser
      *   built its values on. A key whose revision moved on since then is not
      *   applied; it comes back as a conflict instead of overwriting silently.
+     * @param force - optional `{ key: true }` of keys the browser chose to
+     *   overwrite anyway; those skip the base comparison.
      * @returns the wire result for the POST route.
      */
-    applyChanges(changes, base) {
+    applyChanges(changes, base, force) {
       if (!isRecord(changes)) return { ok: false, status: 400, reason: 'invalid-changes' }
       const guard = isRecord(base) ? base : undefined
+      const forced = isRecord(force) ? force : undefined
       const accepted = []
       const ignored = []
       const conflicts = []
@@ -290,7 +293,8 @@ export function createStore(config) {
         const existing = next.keys[key]
         const current = existing === undefined ? 0 : existing.at
         const expected = guard !== undefined && Object.hasOwn(guard, key) ? guard[key] : undefined
-        if (typeof expected === 'number' && expected !== current) {
+        const override = forced !== undefined && forced[key] === true
+        if (override !== true && typeof expected === 'number' && expected !== current) {
           conflicts.push({
             key,
             expected,

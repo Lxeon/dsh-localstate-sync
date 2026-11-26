@@ -174,12 +174,30 @@ window.__ModuleLoader__.load({
         pulled: 'Restored {n} keys from the synced copy (the local values were older).',
         reload: 'Reload',
         dismiss: 'Dismiss',
+        details: 'Details',
+        overwrite: 'Overwrite',
+        overwrote: 'Overwrote {n} keys; the synced copy now matches this browser.',
+        removed: 'removed',
+        sameValue: 'the value is identical',
+        more: '+{n} more',
+        close: 'Close',
+        pullTitle: 'Updated from the synced copy',
+        pullLead: 'These keys were older here and were replaced before the page started:',
       },
       zh: {
         pushFailed: '推送失败：云端已更新到 revision {n}，请刷新后重试。',
         pulled: '已更新到云端版本（{n} 项本地值更旧）。',
         reload: '刷新',
         dismiss: '关闭',
+        details: '查看',
+        overwrite: '强制推送',
+        overwrote: '已强制推送 {n} 个键，云端已改成这个浏览器的值。',
+        removed: '已删除',
+        sameValue: '值没有变化',
+        more: '另有 {n} 项',
+        close: '关闭',
+        pullTitle: '已从云端更新',
+        pullLead: '这些键本地更旧，已在页面启动前被替换：',
       },
     }
 
@@ -215,16 +233,41 @@ window.__ModuleLoader__.load({
       return host
     }
 
+    /** One visible card per key: a repeated failure updates the text instead of stacking. */
+    var toastByKey = {}
+
+    function toastButton(card, text, action, tone) {
+      var element = document.createElement('button')
+      element.type = 'button'
+      element.textContent = text
+      element.style.cssText =
+        'appearance:none;border:0;background:transparent;cursor:pointer;padding:0 2px;font:inherit;white-space:nowrap;color:' +
+        (tone || 'var(--dsw-alias-brand-primary,#1f8a70)')
+      element.addEventListener('click', action)
+      card.appendChild(element)
+      return element
+    }
+
     /**
      * A synced value moved on: the write was refused, so say so instead of
-     * silently keeping the local copy. The only way back to a shared value is a
-     * reload, which is exactly what the notice offers.
+     * silently keeping the local copy. Repeats for the same key reuse the card,
+     * which is what keeps a stale tab from spamming the corner.
      */
     function notice(kind, text, options) {
       var settings = options || {}
-      publishNotice({ kind: kind, text: text, at: Date.now(), key: typeof settings.key === 'string' ? settings.key : null })
+      var key = typeof settings.key === 'string' ? settings.key : null
+      publishNotice({ kind: kind, text: text, at: Date.now(), key: key })
       try {
         if (typeof document === 'undefined' || !document.body) return
+        var visible = key === null ? undefined : toastByKey[key]
+        if (visible !== undefined) {
+          // Same key, newer message: update the card in place instead of stacking,
+          // and swap the buttons so an overwrite confirmation never keeps offering
+          // the actions that just ran.
+          if (visible.label.textContent !== text) visible.label.textContent = text
+          visible.rebuild(settings)
+          return
+        }
         var host = toastContainer()
         var card = document.createElement('div')
         card.className = 'lssync-toast lssync-toast-' + kind
@@ -239,39 +282,196 @@ window.__ModuleLoader__.load({
         label.style.flex = '1'
         label.textContent = text
         card.appendChild(label)
-        function button(text, action) {
-          var element = document.createElement('button')
-          element.type = 'button'
-          element.textContent = text
-          element.style.cssText =
-            'appearance:none;border:0;background:transparent;cursor:pointer;padding:0 2px;font:inherit;color:var(--dsw-alias-brand-primary,#1f8a70)'
-          element.addEventListener('click', action)
-          card.appendChild(element)
-          return element
-        }
         function dismiss() {
           try {
             card.remove()
           } catch (error) {
             // The card may already be gone.
           }
+          if (key !== null && toastByKey[key] !== undefined) delete toastByKey[key]
         }
-        if (kind === 'error') {
-          button(settings.actionLabel || 'Reload', function () {
-            try {
-              location.reload()
-            } catch (error) {
-              // Nothing else to do if reload is blocked.
+        function rebuild(next) {
+          var options = next || {}
+          while (card.childNodes.length > 1) card.removeChild(card.lastChild)
+          if (Array.isArray(options.actions)) {
+            for (var index = 0; index < options.actions.length; index += 1) {
+              var action = options.actions[index]
+              if (action === null || typeof action !== 'object') continue
+              toastButton(
+                card,
+                action.label,
+                (function (callback) {
+                  return function () {
+                    try {
+                      callback()
+                    } catch (error) {
+                      // A broken action must not keep the toast alive.
+                    }
+                  }
+                })(typeof action.run === 'function' ? action.run : function () {}),
+                action.tone,
+              )
             }
-          })
+          }
+          toastButton(card, options.dismissLabel || '×', dismiss)
         }
-        button(settings.dismissLabel || '×', dismiss)
+        rebuild(settings)
         host.appendChild(card)
-        if (kind !== 'error') setTimeout(dismiss, 8000)
+        if (key !== null) toastByKey[key] = { card: card, label: label, rebuild: rebuild }
+        if (kind !== 'error') setTimeout(dismiss, settings.ms === undefined ? 8000 : settings.ms)
       } catch (error) {
         // Notices are cosmetic; capture must keep working without them.
       }
     }
+    function previewText(text, limit) {
+      var value = text === null || text === undefined ? '' : String(text)
+      return value.length > limit ? value.slice(0, limit) + '…' : value
+    }
+
+    function parseJson(text) {
+      try {
+        return typeof text === 'string' ? JSON.parse(text) : undefined
+      } catch (error) {
+        return undefined
+      }
+    }
+
+    /**
+     * Turn a before/after pair into human lines. JSON objects are compared per
+     * top-level field, which is what "which option changed" actually asks for;
+     * anything else falls back to a short preview.
+     */
+    function changeLines(before, after, text) {
+      if (after === null) return [text.removed]
+      var previous = parseJson(before)
+      var next = parseJson(after)
+      if (
+        previous !== undefined &&
+        previous !== null &&
+        next !== undefined &&
+        next !== null &&
+        typeof previous === 'object' &&
+        typeof next === 'object'
+      ) {
+        var lines = []
+        var names = Object.keys(next)
+        for (var index = 0; index < names.length; index += 1) {
+          var name = names[index]
+          if (JSON.stringify(previous[name]) === JSON.stringify(next[name])) continue
+          lines.push(
+            name + ': ' + previewText(JSON.stringify(previous[name]), 48) + ' → ' + previewText(JSON.stringify(next[name]), 48),
+          )
+        }
+        var gone = Object.keys(previous)
+        for (var cursor = 0; cursor < gone.length; cursor += 1) {
+          if (Object.hasOwn(next, gone[cursor])) continue
+          lines.push(gone[cursor] + ': ' + previewText(JSON.stringify(previous[gone[cursor]]), 48) + ' → ' + text.removed)
+        }
+        if (lines.length === 0) return [text.sameValue]
+        if (lines.length > 8) return lines.slice(0, 8).concat(fillSlot(text.more, lines.length - 8))
+        return lines
+      }
+      return [previewText(before, 60) + ' → ' + previewText(after, 60)]
+    }
+
+    var PANEL_ID = '__dsh_localstate_panel'
+
+    /** The "which keys changed" panel behind the pull notice. */
+    function openChangePanel(entries, language) {
+      var text = noticeText(language)
+      try {
+        if (typeof document === 'undefined' || !document.body) return
+        var stale = document.getElementById(PANEL_ID)
+        if (stale) stale.remove()
+        var overlay = document.createElement('div')
+        overlay.id = PANEL_ID
+        overlay.style.cssText =
+          'position:fixed;inset:0;z-index:2147483001;background:rgba(0,0,0,.34);display:flex;align-items:center;justify-content:center;padding:24px'
+        var panel = document.createElement('div')
+        panel.style.cssText =
+          'pointer-events:auto;width:min(720px,100%);max-height:80vh;overflow:auto;border-radius:14px;padding:18px 20px;font-size:13px;line-height:1.5;' +
+          'background:var(--dsw-alias-bg-overlay,#ffffff);color:var(--dsw-alias-label-primary,#111111);' +
+          'border:1px solid var(--dsw-alias-border-l2,rgba(0,0,0,.12));box-shadow:0 12px 40px rgba(0,0,0,.24)'
+        var head = document.createElement('div')
+        head.style.cssText = 'display:flex;align-items:center;gap:12px;margin-bottom:4px'
+        var title = document.createElement('strong')
+        title.style.cssText = 'flex:1;font-size:15px'
+        title.textContent = text.pullTitle
+        head.appendChild(title)
+        var closeButton = document.createElement('button')
+        closeButton.type = 'button'
+        closeButton.textContent = text.close
+        closeButton.style.cssText =
+          'appearance:none;border:0;background:transparent;cursor:pointer;font:inherit;color:var(--dsw-alias-brand-primary,#1f8a70)'
+        head.appendChild(closeButton)
+        panel.appendChild(head)
+        var lead = document.createElement('p')
+        lead.style.cssText = 'margin:0 0 12px;color:var(--dsw-alias-label-secondary,#555555)'
+        lead.textContent = text.pullLead
+        panel.appendChild(lead)
+        var list = Array.isArray(entries) ? entries : []
+        for (var index = 0; index < list.length; index += 1) {
+          var row = list[index]
+          if (!Array.isArray(row) || typeof row[0] !== 'string') continue
+          var item = document.createElement('div')
+          item.style.cssText =
+            'padding:10px 0;border-top:1px solid var(--dsw-alias-border-l1,rgba(0,0,0,.08))'
+          var keyLine = document.createElement('div')
+          keyLine.style.cssText = 'display:flex;align-items:baseline;gap:8px;margin-bottom:4px'
+          var keyName = document.createElement('code')
+          keyName.style.cssText = 'font-size:12px;word-break:break-all'
+          keyName.textContent = row[0]
+          keyLine.appendChild(keyName)
+          if (typeof row[1] === 'number') {
+            var badge = document.createElement('span')
+            badge.style.cssText =
+              'font-size:11px;padding:1px 6px;border-radius:999px;white-space:nowrap;' +
+              'background:var(--dsw-alias-bg-layer-2,rgba(0,0,0,.05));color:var(--dsw-alias-label-secondary,#555555)'
+            badge.textContent = 'r' + row[1]
+            keyLine.appendChild(badge)
+          }
+          item.appendChild(keyLine)
+          var lines = changeLines(row[2] === undefined ? null : row[2], row[3] === undefined ? null : row[3], text)
+          for (var cursor = 0; cursor < lines.length; cursor += 1) {
+            var line = document.createElement('div')
+            line.style.cssText =
+              'font-size:12px;color:var(--dsw-alias-label-secondary,#555555);word-break:break-word;margin-top:2px'
+            line.textContent = lines[cursor]
+            item.appendChild(line)
+          }
+          panel.appendChild(item)
+        }
+        function close() {
+          try {
+            overlay.remove()
+          } catch (error) {
+            // Already closed.
+          }
+          try {
+            document.removeEventListener('keydown', onKey)
+          } catch (error) {
+            // Nothing to detach.
+          }
+        }
+        function onKey(event) {
+          if (event && event.key === 'Escape') close()
+        }
+        closeButton.addEventListener('click', close)
+        overlay.addEventListener('click', function (event) {
+          if (event && event.target === overlay) close()
+        })
+        try {
+          document.addEventListener('keydown', onKey)
+        } catch (error) {
+          // Escape handling is a convenience.
+        }
+        overlay.appendChild(panel)
+        document.body.appendChild(overlay)
+      } catch (error) {
+        // The panel is cosmetic; capture must keep working without it.
+      }
+    }
+
     function configUrl() {
       try {
         return new URL(CONFIG_ROUTE, document.baseURI).href
@@ -706,6 +906,10 @@ window.__ModuleLoader__.load({
           /** Keys resent once with a refreshed base, to avoid a ping-pong loop. */
           retried: {},
           pending: new Map(),
+          /** Keys the user chose to overwrite regardless of the synced revision. */
+          force: {},
+          /** Last revision a given key was announced for, so repeats stay quiet. */
+          notified: {},
           timer: undefined,
           retryTimer: undefined,
           retry: 0,
@@ -727,8 +931,26 @@ window.__ModuleLoader__.load({
           restored = 0
         }
         if (restored > 0) {
-          var bootText = noticeText(detectLanguage(ctx, {}))
-          notice('info', fillSlot(bootText.pulled, restored), { dismissLabel: bootText.dismiss })
+          var bootLanguageNow = detectLanguage(ctx, {})
+          var bootText = noticeText(bootLanguageNow)
+          var bootList = []
+          try {
+            if (Array.isArray(globalThis.__DSH_LOCALSTATE_APPLIED_LIST__)) bootList = globalThis.__DSH_LOCALSTATE_APPLIED_LIST__
+          } catch (error) {
+            bootList = []
+          }
+          notice('info', fillSlot(bootText.pulled, restored), {
+            ms: 14000,
+            dismissLabel: bootText.close,
+            actions: [
+              {
+                label: bootText.details,
+                run: function () {
+                  openChangePanel(bootList, bootLanguageNow)
+                },
+              },
+            ],
+          })
         }
 
         function schedule() {
@@ -777,6 +999,8 @@ window.__ModuleLoader__.load({
             if (typeof pair[0] === 'string' && typeof pair[1] === 'number') {
               meta.at[pair[0]] = pair[1]
               state.base[pair[0]] = pair[1]
+              delete state.conflicts[pair[0]]
+              delete state.notified[pair[0]]
             }
           }
           if (typeof body.seq === 'number') meta.seq = body.seq
@@ -808,15 +1032,67 @@ window.__ModuleLoader__.load({
               continue
             }
             state.conflicts[row.key] = { local: local[row.key], remote: row.value, at: row.current }
+            if (state.notified[row.key] === row.current) continue
+            state.notified[row.key] = row.current
             var failure = noticeText(detectLanguage(ctx, {}))
             notice('error', fillSlot(failure.pushFailed, row.current), {
               key: row.key,
-              actionLabel: failure.reload,
               dismissLabel: failure.dismiss,
+              actions: [
+                {
+                  label: failure.reload,
+                  run: function () {
+                    try {
+                      location.reload()
+                    } catch (error) {
+                      // Nothing else to do if reload is blocked.
+                    }
+                  },
+                },
+                {
+                  label: failure.overwrite,
+                  tone: 'var(--dsw-alias-state-error,#b3261e)',
+                  run: function (key) {
+                    return function () {
+                      forceKey(key)
+                    }
+                  }(row.key),
+                },
+              ],
             })
           }
           publishConflicts()
           if (changed) schedule()
+        }
+
+        /**
+         * Overwrite on purpose. The next POST carries `force` for this key, so the
+         * Host takes the local value even though the synced revision moved on.
+         */
+        function forceKey(key) {
+          var text = noticeText(detectLanguage(ctx, {}))
+          var value = null
+          if (Object.hasOwn(state.conflicts, key)) value = state.conflicts[key].local
+          else {
+            try {
+              value = localStorage.getItem(key)
+            } catch (error) {
+              value = null
+            }
+          }
+          if (typeof value !== 'string') {
+            notice('error', text.pushFailed.replace('{n}', '?'), { key: key, dismissLabel: text.dismiss })
+            return
+          }
+          state.force[key] = true
+          delete state.conflicts[key]
+          delete state.base[key]
+          delete state.notified[key]
+          delete state.retried[key]
+          state.pending.set(key, value)
+          publishConflicts()
+          flush(false)
+          notice('info', fillSlot(text.overwrote, 1), { key: key, ms: 6000, dismissLabel: text.close })
         }
 
         function flush(useBeacon) {
@@ -833,7 +1109,19 @@ window.__ModuleLoader__.load({
               hasBase = true
             }
           })
-          var payload = JSON.stringify(hasBase ? { changes: changes, base: base } : { changes: changes })
+          var force = {}
+          var hasForce = false
+          for (var forcedKey in state.force) {
+            if (!Object.hasOwn(state.force, forcedKey)) continue
+            if (!Object.hasOwn(changes, forcedKey)) continue
+            force[forcedKey] = true
+            hasForce = true
+            delete state.force[forcedKey]
+          }
+          var body = { changes: changes }
+          if (hasBase) body.base = base
+          if (hasForce) body.force = force
+          var payload = JSON.stringify(body)
           state.pending.clear()
           if (useBeacon && typeof navigator.sendBeacon === 'function' && payload.length < 60000) {
             try {

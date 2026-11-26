@@ -14,6 +14,7 @@
   }
   if (!meta || typeof meta !== 'object' || !meta.at || typeof meta.at !== 'object') meta = { at: {} }
   var applied = 0
+  var appliedList = []
   for (var index = 0; index < data.keys.length; index += 1) {
     var row = data.keys[index]
     if (!Array.isArray(row) || row.length < 3) continue
@@ -23,10 +24,17 @@
     if (typeof key !== 'string' || typeof revision !== 'number') continue
     var known = typeof meta.at[key] === 'number' ? meta.at[key] : 0
     if (revision <= known) continue
+    var previous = null
+    try {
+      previous = localStorage.getItem(key)
+    } catch (error) {
+      previous = null
+    }
     try {
       if (value === null) localStorage.removeItem(key)
       else if (typeof value === 'string') localStorage.setItem(key, value)
       else continue
+      appliedList.push([key, revision, previous, value])
       meta.at[key] = revision
       applied += 1
     } catch (error) {
@@ -42,4 +50,5 @@
     }
   }
   globalThis.__DSH_LOCALSTATE_APPLIED__ = applied
+  globalThis.__DSH_LOCALSTATE_APPLIED_LIST__ = appliedList
 })()
