@@ -24,7 +24,9 @@ const commit = git('rev-parse', 'HEAD')
 const gitTimestamp = Number(git('log', '-1', '--format=%ct'))
 // The index is read by other machines, so the URL comes from package.json (the public
 // repository), never from this checkout's git remote, which may point somewhere private.
-const remote = String(process.env.LSYNC_REPO_URL ?? pkg.repository?.url ?? '').replace(/\.git$/, '')
+const remote = String(process.env.LSYNC_REPO_URL ?? pkg.repository?.url ?? '')
+  .replace(/^git\+/, '')
+  .replace(/\.git$/, '')
 if (remote === '') throw new Error('package.json must declare repository.url, or set LSYNC_REPO_URL to the public repository')
 const icon = `data:image/svg+xml;base64,${readFileSync(join(root, 'icon.svg')).toString('base64')}`
 
