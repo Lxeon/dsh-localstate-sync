@@ -1,0 +1,66 @@
+{
+  "format": 1,
+  "title": {
+    "en": "Lxeon's DSH plugins",
+    "zh": "Lxeon 的 DSH 插件"
+  },
+  "description": {
+    "en": "DSH plugins published from this repository, installable by pinned commit.",
+    "zh": "从本仓库发布的 DSH 插件，按固定提交安装。"
+  },
+  "metadata": {
+    "categories": {
+      "ui": {
+        "title": {
+          "en": "Interface",
+          "zh": "界面"
+        }
+      }
+    },
+    "labels": {},
+    "sortKeys": {}
+  },
+  "plugins": [
+    {
+      "name": "@local/dsh-localstate-sync",
+      "title": {
+        "en": "Browser state sync",
+        "zh": "浏览器状态同步"
+      },
+      "description": {
+        "en": "Saves the localStorage values DSH plugins keep in this browser into $DSH_HOME, and restores them before the next boot.",
+        "zh": "把 DSH 插件留在这个浏览器里的 localStorage 值保存到 $DSH_HOME，并在下次启动前灌回去。"
+      },
+      "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzNiIgaGVpZ2h0PSIzNiIgdmlld0JveD0iMCAwIDM2IDM2Ij4KICA8cmVjdCB4PSIzIiB5PSI4IiB3aWR0aD0iMTgiIGhlaWdodD0iMTUiIHJ4PSIzIiBmaWxsPSJub25lIiBzdHJva2U9IiMxZjhhNzAiIHN0cm9rZS13aWR0aD0iMiIvPgogIDxwYXRoIGQ9Ik0zIDEzaDE4IiBmaWxsPSJub25lIiBzdHJva2U9IiMxZjhhNzAiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPGNpcmNsZSBjeD0iNi41IiBjeT0iMTAuNSIgcj0iMSIgZmlsbD0iIzFmOGE3MCIvPgogIDxjaXJjbGUgY3g9IjEwIiBjeT0iMTAuNSIgcj0iMSIgZmlsbD0iIzFmOGE3MCIvPgogIDxwYXRoIGQ9Ik0yNiA5djE3IiBmaWxsPSJub25lIiBzdHJva2U9IiMxZjhhNzAiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTIxLjUgMjEuNSAyNiAyNmw0LjUtNC41IiBmaWxsPSJub25lIiBzdHJva2U9IiMxZjhhNzAiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+Cjwvc3ZnPgo=",
+      "author": "Lxeon",
+      "homepage": "https://github.com/Lxeon/dsh-localstate-sync",
+      "repository": {
+        "url": "https://github.com/Lxeon/dsh-localstate-sync"
+      },
+      "metadata": {
+        "category": "ui",
+        "keywords": [
+          "localstorage",
+          "sync",
+          "browser-state",
+          "config"
+        ],
+        "labels": []
+      },
+      "versions": [
+        {
+          "version": "0.1.0",
+          "publishTimestamp": 1795697504,
+          "source": {
+            "type": "git",
+            "url": "https://github.com/Lxeon/dsh-localstate-sync.git",
+            "commit": "97621f802392c9c7b12164ed2cb0dd5e9c767fcf"
+          },
+          "engines": {
+            "dsh": "^0.2.2-rc.5"
+          }
+        }
+      ]
+    }
+  ]
+}
