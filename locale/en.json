@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Browser state sync",
+    "description": "Saves localStorage values this browser keeps for plugins into $DSH_HOME/localstate-sync/state.json and restores them before the page boots, so keybindings, panel layouts and other browser-only plugin settings survive a cache wipe or follow you to another address for the same Harness.",
+    "detail": "docs/en.md"
+  }
+}

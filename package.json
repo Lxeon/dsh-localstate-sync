@@ -1,0 +1,55 @@
+{
+  "name": "@local/dsh-localstate-sync",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Persist browser localStorage state into a JSON file under the DSH home and restore it before the page boots.",
+  "dependencies": {
+    "schemastery": "^3.18.0"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./seeder.js": "./seeder.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "engines": {
+    "dsh": "^0.2.2-rc.5"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "seeder.js",
+    "store.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "docs",
+    "icon.svg",
+    "README.md",
+    "test",
+    "market"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-connection"
+      ]
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Lxeon/dsh-localstate-sync.git"
+  },
+  "homepage": "https://github.com/Lxeon/dsh-localstate-sync",
+  "author": "Lxeon",
+  "scripts": {
+    "verify": "node test/verify.mjs",
+    "market": "node market/build-index.mjs"
+  }
+}

@@ -1,0 +1,10 @@
+- insert:
+    - id: localstate-sync
+      name: '@local/dsh-localstate-sync'
+      config:
+        includePrefixes:
+          - 'dsh.'
+        maxBytes: 262144
+        maxKeys: 2000
+        injectSnapshot: true
+        capture: true

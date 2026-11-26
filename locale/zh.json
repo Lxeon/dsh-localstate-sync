@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "浏览器状态同步",
+    "description": "把插件存在浏览器里的 localStorage 值保存到 $DSH_HOME/localstate-sync/state.json，并在页面启动前写回，因此快捷键、面板布局等只存在于浏览器的插件设置可以在清缓存后恢复，也能在同一个 Harness 的另一个访问地址上继续使用。默认只收集以 dsh. 开头的键，可用 includePrefixes、includeExact、excludeExact 调整。",
+    "detail": "README.md"
+  }
+}
