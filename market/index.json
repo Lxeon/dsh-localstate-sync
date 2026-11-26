@@ -50,11 +50,11 @@
       "versions": [
         {
           "version": "0.2.0",
-          "publishTimestamp": 1795697504,
+          "publishTimestamp": 1795697625,
           "source": {
             "type": "git",
             "url": "https://github.com/Lxeon/dsh-localstate-sync.git",
-            "commit": "ac07a7c2e08ef3a40141385a75aaac22a5f04d43"
+            "commit": "d10e795ef38f230260d1a4d4deb8127ea1668b6b"
           },
           "engines": {
             "dsh": "^0.2.2-rc.5"
