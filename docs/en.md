@@ -35,7 +35,9 @@ message for the same key updates the existing card instead of stacking a second 
 
 Conflicts are decided on the write path: a batch carries `base` (the `at` each value was written
 on), the Host answers `conflicts` for keys that moved on, the client resends once against the fresh
-revision, and a second conflict reports as above. The configuration page also lists the keys that
+revision, and a second conflict reports as above. A key already in conflict stays quiet while the
+synced revision keeps moving on (901 → 902 → 903) — the card keeps the revision it was announced
+with, and only a reload (taking the synced value) or "Overwrite" (keeping yours) ends the episode. The configuration page also lists the keys that
 kept their local value.
 
 ## Configuration

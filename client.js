@@ -1031,8 +1031,14 @@ window.__ModuleLoader__.load({
               changed = true
               continue
             }
+            // One announcement per episode: while the key is already known to be in
+            // conflict, keep tracking the newest synced revision but stay quiet, so a
+            // busy tab cannot keep rewriting the corner with 901, 902, 903…
+            if (Object.hasOwn(state.conflicts, row.key)) {
+              state.conflicts[row.key] = { local: local[row.key], remote: row.value, at: row.current }
+              continue
+            }
             state.conflicts[row.key] = { local: local[row.key], remote: row.value, at: row.current }
-            if (state.notified[row.key] === row.current) continue
             state.notified[row.key] = row.current
             var failure = noticeText(detectLanguage(ctx, {}))
             notice('error', fillSlot(failure.pushFailed, row.current), {

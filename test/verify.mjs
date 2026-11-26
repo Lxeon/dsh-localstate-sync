@@ -404,6 +404,15 @@ check('nothing is announced when the revisions already agree', notices.every((en
 sandbox.localStorage.setItem('dsh.probe', 'local-2')
 await sleep(520)
 const thirdPost = posts()[2]
+
+// The synced copy keeps moving while the key is already known to be in conflict.
+replies.push({ ok: true, seq: 12, accepted: [], conflicts: [{ key: 'dsh.probe', expected: 7, current: 12, at: 12, value: 'remote-c' }] })
+replies.push({ ok: true, seq: 13, accepted: [], conflicts: [{ key: 'dsh.probe', expected: 7, current: 13, at: 13, value: 'remote-d' }] })
+sandbox.localStorage.setItem('dsh.probe', 'local-3')
+await sleep(700)
+const episodes = (sandbox.__DSH_LOCALSTATE_NOTICES__ ?? []).filter((entry) => entry.kind === 'error')
+check('a key already in conflict is not announced again as the copy moves on', episodes.length === 1, episodes.map((entry) => entry.text))
+check('the conflict record still tracks the newest synced revision', (sandbox.__DSH_LOCALSTATE_CONFLICTS__?.['dsh.probe']?.at ?? 0) >= 12, sandbox.__DSH_LOCALSTATE_CONFLICTS__?.['dsh.probe'])
 check('after a failed push the base stays stale, so only a reload can pull', thirdPost !== undefined && bodyOf(thirdPost).base['dsh.probe'] === 7, thirdPost && bodyOf(thirdPost).base)
 
 sandbox.localStorage.setItem('dsh.probe', 'local-3')
