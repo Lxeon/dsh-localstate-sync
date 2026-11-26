@@ -163,6 +163,7 @@ window.__ModuleLoader__.load({
       maxBytes: '快照总字节上限',
       maxKeys: '保留的键数量上限',
       injectMaxBytes: '注入头部的字节上限',
+      language: '提示与设置界面的语言',
     }
 
     var NOTICE_HOST_ID = '__dsh_localstate_toasts'
@@ -283,8 +284,39 @@ window.__ModuleLoader__.load({
       return FORM_TEXT[String(language || 'en').indexOf('zh') === 0 ? 'zh' : 'en']
     }
 
+    // The configured language wins ('zh' / 'en'); 'auto' follows the browser, then the DSH
+    // locale, then the document language. The DSH UI itself may be English while the person
+    // reading the notices is not, so the browser is asked before the app.
+    var bootLanguage = 'auto'
+
+    function configuredLanguage() {
+      try {
+        var snapshot = globalThis.__DSH_LOCALSTATE__
+        if (snapshot && snapshot.config && typeof snapshot.config.language === 'string') return snapshot.config.language
+      } catch (error) {
+        // No injected snapshot: fall back to whatever refresh() learned.
+      }
+      return bootLanguage
+    }
+
+    function browserLanguage() {
+      try {
+        var list = navigator.languages !== undefined && navigator.languages.length > 0 ? navigator.languages : [navigator.language]
+        for (var index = 0; index < list.length; index += 1) {
+          if (typeof list[index] === 'string' && list[index] !== '') return list[index]
+        }
+      } catch (error) {
+        // No navigator: fall through.
+      }
+      return undefined
+    }
+
     function detectLanguage(ctx, props) {
       if (props && typeof props.language === 'string' && props.language !== '') return props.language
+      var chosen = configuredLanguage()
+      if (chosen === 'zh' || chosen === 'en') return chosen
+      var browser = browserLanguage()
+      if (browser !== undefined) return browser
       try {
         var snapshot = ctx.locale && typeof ctx.locale.getSnapshot === 'function' ? ctx.locale.getSnapshot() : undefined
         if (snapshot && typeof snapshot.active === 'string') return snapshot.active
@@ -544,6 +576,20 @@ window.__ModuleLoader__.load({
                 edit(field.name, asList(event.target.value))
               },
             })
+          } else if (field.kind === 'union' && Array.isArray(field.options) && field.options.length > 0) {
+            control = h(
+              'select',
+              {
+                className: 'lssync-input',
+                value: value === undefined || value === null ? '' : String(value),
+                onChange: function (event) {
+                  edit(field.name, event.target.value)
+                },
+              },
+              field.options.map(function (option) {
+                return h('option', { key: option, value: option }, option)
+              }),
+            )
           } else {
             control = h('input', {
               className: 'lssync-input',
@@ -828,6 +874,9 @@ window.__ModuleLoader__.load({
             .then(function (body) {
               if (body === undefined) return
               applyConfig(state, body.config)
+              if (typeof body.config === 'object' && body.config !== null && typeof body.config.language === 'string') {
+                bootLanguage = body.config.language
+              }
               applySnapshot(state, body)
             })
             .catch(function () {

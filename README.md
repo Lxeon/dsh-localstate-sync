@@ -27,6 +27,8 @@ English: [docs/en.md](docs/en.md)
 | 保存并推送时，本地版本比云端旧 | 右下角弹「推送失败：云端已更新到 revision N，请刷新后重试」 | 本地值仍显示，但**不再覆盖云端**；点刷新才会取用云端值 |
 | 加载时，本地版本比云端旧 | 启动后提示「已更新到云端版本（N 项）」 | 已经是云端值，无需操作 |
 
+提示的语言由配置项 `language` 决定：`auto`（默认）先看浏览器语言，再看 DSH 自己的界面语言，都没有就用英文；设成 `zh` 或 `en` 则固定，设置表单的字段标签也一起跟着变。表单里存完立刻生效，不需要刷新。
+
 冲突判定在写入侧：一批写入带 `base`（每个键写入时所基于的 `at`），Host 发现该键已经前进就返回
 `conflicts`，客户端按新版本重发一次；再冲突就按上表报错。配置页里也会列出保留了本地值的键。
 
@@ -48,6 +50,7 @@ English: [docs/en.md](docs/en.md)
         injectSnapshot: true        # false = 只保存，不自动恢复
         capture: true               # false = 停止采集（既有数据保留）
         file: 'localstate-sync/state.json'
+        language: auto               # 提示与设置表单的语言：auto | en | zh
 ```
 
 表单走的是 `GET/POST /api/localstate.config.v1`：GET 返回字段描述、当前值、哪些字段是被显式覆盖的、以及解析后的状态文件路径；POST 只提交改动过的字段，Host 先用 `configEditor` 校验再写 YAML，非法值会在落盘前被拒（`400`）。这个路由在插件被停用（`enabled: false`）时仍然可用，所以关掉了也能在界面上重新打开。

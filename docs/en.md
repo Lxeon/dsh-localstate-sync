@@ -50,6 +50,7 @@ Open this bundle's card on the **Plugins** page and the form renders inside it (
         injectSnapshot: true        # false = save only, never restore automatically
         capture: true               # false = stop capturing (existing data is kept)
         file: 'localstate-sync/state.json'
+        language: auto               # language of the notices and the form: auto | en | zh
 ```
 
 The form talks to `GET/POST /api/localstate.config.v1`: GET returns the field descriptors, current values, which fields are explicitly overridden, and the resolved state-file path; POST submits only the changed fields, and the Host validates them through `configEditor` before touching the YAML, so an invalid value is rejected (`400`) before it lands. That route keeps working while the bundle is disabled (`enabled: false`), so it can be turned back on from the UI.

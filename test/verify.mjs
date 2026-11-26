@@ -148,7 +148,7 @@ check('index-inject listener attached', captured.listeners.some(([event]) => eve
 
 const getResponse = await captured.route.fetch(new Request('http://127.0.0.1:3080/api/localstate.v1', { method: 'GET' }))
 const getBody = await getResponse.json()
-check('GET returns the snapshot plus client config', getResponse.status === 200 && Array.isArray(getBody.keys) && getBody.config.prefixes[0] === 'dsh.', { status: getResponse.status, config: getBody.config })
+check('GET returns the snapshot plus client config', getResponse.status === 200 && Array.isArray(getBody.keys) && getBody.config.prefixes[0] === 'dsh.' && getBody.config.language === 'auto', { status: getResponse.status, config: getBody.config })
 
 const postResponse = await captured.route.fetch(new Request('http://127.0.0.1:3080/api/localstate.v1', {
   method: 'POST',
@@ -170,13 +170,15 @@ check('config route registered beside the data route', configRoute !== undefined
 
 const { fieldDescriptors } = await import('../index.js')
 const fields = fieldDescriptors()
-check('descriptors cover every config field', fields.length === 10 && fields[0].name === 'enabled' && fields[9].name === 'injectMaxBytes', fields.map((field) => field.name))
+check('descriptors cover every config field', fields.length === 11 && fields[0].name === 'enabled' && fields[10].name === 'language', fields.map((field) => field.name))
 check('descriptors carry kind and description', fields[0].kind === 'boolean' && fields[0].description.includes('Turn the whole bundle off') && fields[4].kind === 'array' && fields[4].item === 'string', fields.slice(0, 5))
 check('numeric descriptors carry their minimum', fields[7].min === 1024 && fields[7].default === 262144, fields[7])
+const languageField = fields.find((field) => field.name === 'language')
+check('the language field is a union with its literals', languageField?.kind === 'union' && languageField.default === 'auto' && JSON.stringify(languageField.options) === '["auto","en","zh"]', languageField)
 
 const configGet = await configRoute.fetch(new Request('http://127.0.0.1:3080/api/localstate.config.v1', { method: 'GET' }))
 const configGetBody = await configGet.json()
-check('config GET reports values, fields and writability', configGet.status === 200 && configGetBody.ok === true && configGetBody.writable === true && configGetBody.values.maxKeys === 2000 && configGetBody.fields.length === 10, { status: configGet.status, writable: configGetBody.writable })
+check('config GET reports values, fields and writability', configGet.status === 200 && configGetBody.ok === true && configGetBody.writable === true && configGetBody.values.maxKeys === 2000 && configGetBody.fields.length === 11, { status: configGet.status, writable: configGetBody.writable })
 check('config GET reports the resolved file path', configGetBody.filePath === join(home, 'localstate-sync/state.json'), configGetBody.filePath)
 check('config GET marks the explicit override keys', Array.isArray(configGetBody.explicit) && configGetBody.explicit.includes('includePrefixes'), configGetBody.explicit)
 
@@ -219,6 +221,7 @@ function injectFor(principalKind) {
 const ownerRows = injectFor('owner')
 check('owner gets a global row and the seeder script', ownerRows.length === 2 && ownerRows[0].kind === 'global' && ownerRows[0].name === '__DSH_LOCALSTATE__' && ownerRows[1].kind === 'script' && ownerRows[1].placement === 'head', ownerRows.map((row) => row.kind))
 check('injected global carries triples', Array.isArray(ownerRows[0]?.value?.keys) && ownerRows[0].value.prefixes[0] === 'dsh.', ownerRows[0]?.value?.prefixes)
+check('injected global carries the configured language', ownerRows[0]?.value?.config?.language === 'auto', ownerRows[0]?.value?.config)
 check('non-owner peer receives nothing', injectFor('shared').length === 0, injectFor('shared').length)
 check('seeder script is the file text', ownerRows[1].text.startsWith('/* Injected into <head>'), ownerRows[1].text.slice(0, 40))
 
@@ -307,6 +310,8 @@ sandbox.Storage.prototype = {
 }
 // localStorage must reach its methods through the prototype so the capture patch sees the writes.
 sandbox.localStorage = Object.create(sandbox.Storage.prototype)
+// The notices follow the browser before the DSH locale, so the sandbox needs a language.
+sandbox.navigator = { language: 'zh-CN', languages: ['zh-CN'] }
 sandbox.window = sandbox
 sandbox.addEventListener = () => {}
 sandbox.removeEventListener = () => {}

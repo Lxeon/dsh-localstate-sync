@@ -40,7 +40,11 @@ export const DEFAULT_CONFIG = {
   injectMaxBytes: 131072,
   injectSnapshot: true,
   capture: true,
+  language: 'auto',
 }
+
+/** Languages the browser-facing text can be rendered in. */
+export const LANGUAGES = ['auto', 'en', 'zh']
 
 function stringList(value, fallback) {
   if (value === undefined || value === null) return [...fallback]
@@ -73,6 +77,9 @@ export function normalizeConfig(raw) {
   if (typeof input.enabled === 'boolean') config.enabled = input.enabled
   if (typeof input.injectSnapshot === 'boolean') config.injectSnapshot = input.injectSnapshot
   if (typeof input.capture === 'boolean') config.capture = input.capture
+  if (typeof input.language === 'string' && LANGUAGES.includes(input.language.trim())) {
+    config.language = input.language.trim()
+  }
   if (typeof input.file === 'string' && input.file.trim() !== '') config.file = input.file.trim()
   config.includePrefixes = stringList(input.includePrefixes, DEFAULT_CONFIG.includePrefixes)
   config.includeExact = stringList(input.includeExact, [])

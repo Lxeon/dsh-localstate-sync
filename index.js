@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import Schema from 'schemastery'
-import { DEFAULT_CONFIG, createStore, normalizeConfig, resolveStorePath } from './store.js'
+import { DEFAULT_CONFIG, LANGUAGES, createStore, normalizeConfig, resolveStorePath } from './store.js'
 
 /**
  * The row's config schema. It is what the Plugins page renders as a form and
@@ -26,6 +26,7 @@ export const Config = Schema.object({
   maxBytes: Schema.number().min(1024).default(262144).description('Largest accepted value and snapshot size, in bytes. A larger batch is rejected, never truncated.'),
   maxKeys: Schema.number().min(1).default(2000).description('Key cap. Tombstones are dropped first, then the oldest values.'),
   injectMaxBytes: Schema.number().min(0).default(131072).description('Above this size the snapshot is not injected; the page pulls it over the route instead.'),
+  language: Schema.union(LANGUAGES.map((value) => Schema.const(value))).default('auto').description('Language of the notices and the settings form. auto follows the browser, then the DSH locale.'),
 })
 
 /** Route path; it carries the `/api` prefix the shared channel matches on. */
@@ -43,6 +44,10 @@ export const GLOBAL_NAME = '__DSH_LOCALSTATE__'
  * added, renamed, or re-typed in exactly one place.
  * @returns one descriptor per config field, in declaration order.
  */
+// schemastery encodes a union of constants as a refs blob; pull the literal values out so
+// the settings form can render a select without importing the schema library client-side.
+const UNION_OPTIONS = { language: LANGUAGES }
+
 export function fieldDescriptors() {
   const dict = Config.dict !== null && typeof Config.dict === 'object' ? Config.dict : {}
   const out = []
@@ -59,6 +64,7 @@ export function fieldDescriptors() {
     if (typeof meta.min === 'number') descriptor.min = meta.min
     if (typeof meta.max === 'number') descriptor.max = meta.max
     if (kind === 'array') descriptor.item = typeof schema?.inner?.type === 'string' ? schema.inner.type : 'string'
+    if (kind === 'union' && Array.isArray(UNION_OPTIONS[name])) descriptor.options = [...UNION_OPTIONS[name]]
     out.push(descriptor)
   }
   return out
@@ -187,18 +193,19 @@ export function apply(ctx, config) {
     log('warn', `[localstate-sync] unreadable state moved to ${store.recovered.aside}: ${store.recovered.message}`)
   }
 
+  // The browser needs the allowlist and the chosen language both at boot (injected global)
+  // and after a live config save (this route), so one shape serves both.
+  const browserConfig = () => ({
+    prefixes: cfg.includePrefixes,
+    exact: cfg.includeExact,
+    exclude: cfg.excludeExact,
+    capture: cfg.capture,
+    language: cfg.language,
+  })
+
   const handle = async (request) => {
     if (request.method === 'GET') {
-      const injection = store.injection(cfg.injectMaxBytes)
-      return jsonResponse(200, {
-        ...injection,
-        config: {
-          prefixes: cfg.includePrefixes,
-          exact: cfg.includeExact,
-          exclude: cfg.excludeExact,
-          capture: cfg.capture,
-        },
-      })
+      return jsonResponse(200, { ...store.injection(cfg.injectMaxBytes), config: browserConfig() })
     }
     if (request.method === 'POST') {
       let body
@@ -234,7 +241,11 @@ export function apply(ctx, config) {
         return
       }
       if (injection.keys.length === 0) return
-      table.push({ kind: 'global', name: GLOBAL_NAME, value: { ...injection, prefixes: cfg.includePrefixes } })
+      table.push({
+        kind: 'global',
+        name: GLOBAL_NAME,
+        value: { ...injection, config: browserConfig(), prefixes: cfg.includePrefixes },
+      })
       const text = readSeeder()
       if (text !== '') table.push({ kind: 'script', placement: 'head', text })
     })
