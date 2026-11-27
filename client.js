@@ -72,6 +72,10 @@ window.__ModuleLoader__.load({
           continue
         }
         meta.at[key] = revision
+        // The value now on the page IS the host copy at `revision`; record that as
+        // the baseline for the next write so editing a freshly-restored key does not
+        // look like a stale write and trip a spurious conflict on its first flush.
+        if (state.base) state.base[key] = revision
         applied += 1
       }
       if (typeof data.seq === 'number' && data.seq > meta.seq) meta.seq = data.seq
@@ -166,8 +170,6 @@ window.__ModuleLoader__.load({
       language: '提示与设置界面的语言',
     }
 
-    var NOTICE_HOST_ID = '__dsh_localstate_toasts'
-
     var NOTICE_TEXT = {
       en: {
         pushFailed: 'Push failed: the synced copy already moved to revision {n}. Reload to take the newer value.',
@@ -221,108 +223,6 @@ window.__ModuleLoader__.load({
       }
     }
 
-    function toastContainer() {
-      var host = document.getElementById(NOTICE_HOST_ID)
-      if (host) return host
-      host = document.createElement('div')
-      host.id = NOTICE_HOST_ID
-      host.setAttribute('data-plugin', 'localstate-sync')
-      host.style.cssText =
-        'position:fixed;right:16px;bottom:16px;z-index:2147483000;display:flex;flex-direction:column;gap:8px;max-width:420px;pointer-events:none;font-family:inherit'
-      document.body.appendChild(host)
-      return host
-    }
-
-    /** One visible card per key: a repeated failure updates the text instead of stacking. */
-    var toastByKey = {}
-
-    function toastButton(card, text, action, tone) {
-      var element = document.createElement('button')
-      element.type = 'button'
-      element.textContent = text
-      element.style.cssText =
-        'appearance:none;border:0;background:transparent;cursor:pointer;padding:0 2px;font:inherit;white-space:nowrap;color:' +
-        (tone || 'var(--dsw-alias-brand-primary,#1f8a70)')
-      element.addEventListener('click', action)
-      card.appendChild(element)
-      return element
-    }
-
-    /**
-     * A synced value moved on: the write was refused, so say so instead of
-     * silently keeping the local copy. Repeats for the same key reuse the card,
-     * which is what keeps a stale tab from spamming the corner.
-     */
-    function notice(kind, text, options) {
-      var settings = options || {}
-      var key = typeof settings.key === 'string' ? settings.key : null
-      publishNotice({ kind: kind, text: text, at: Date.now(), key: key })
-      try {
-        if (typeof document === 'undefined' || !document.body) return
-        var visible = key === null ? undefined : toastByKey[key]
-        if (visible !== undefined) {
-          // Same key, newer message: update the card in place instead of stacking,
-          // and swap the buttons so an overwrite confirmation never keeps offering
-          // the actions that just ran.
-          if (visible.label.textContent !== text) visible.label.textContent = text
-          visible.rebuild(settings)
-          return
-        }
-        var host = toastContainer()
-        var card = document.createElement('div')
-        card.className = 'lssync-toast lssync-toast-' + kind
-        card.setAttribute('role', kind === 'error' ? 'alert' : 'status')
-        card.style.cssText =
-          'pointer-events:auto;display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:10px;font-size:13px;line-height:1.45;' +
-          'background:var(--dsw-alias-bg-overlay,#ffffff);color:var(--dsw-alias-label-primary,#111111);' +
-          'border:1px solid var(--dsw-alias-border-l2,rgba(0,0,0,.12));border-left:3px solid ' +
-          (kind === 'error' ? 'var(--dsw-alias-state-error,#b3261e)' : 'var(--dsw-alias-brand-primary,#1f8a70)') +
-          ';box-shadow:0 6px 24px rgba(0,0,0,.16)'
-        var label = document.createElement('span')
-        label.style.flex = '1'
-        label.textContent = text
-        card.appendChild(label)
-        function dismiss() {
-          try {
-            card.remove()
-          } catch (error) {
-            // The card may already be gone.
-          }
-          if (key !== null && toastByKey[key] !== undefined) delete toastByKey[key]
-        }
-        function rebuild(next) {
-          var options = next || {}
-          while (card.childNodes.length > 1) card.removeChild(card.lastChild)
-          if (Array.isArray(options.actions)) {
-            for (var index = 0; index < options.actions.length; index += 1) {
-              var action = options.actions[index]
-              if (action === null || typeof action !== 'object') continue
-              toastButton(
-                card,
-                action.label,
-                (function (callback) {
-                  return function () {
-                    try {
-                      callback()
-                    } catch (error) {
-                      // A broken action must not keep the toast alive.
-                    }
-                  }
-                })(typeof action.run === 'function' ? action.run : function () {}),
-                action.tone,
-              )
-            }
-          }
-          toastButton(card, options.dismissLabel || '×', dismiss)
-        }
-        rebuild(settings)
-        host.appendChild(card)
-        if (key !== null) toastByKey[key] = { card: card, label: label, rebuild: rebuild }
-        if (kind !== 'error') setTimeout(dismiss, settings.ms === undefined ? 8000 : settings.ms)
-      } catch (error) {
-        // Notices are cosmetic; capture must keep working without them.
-      }
-    }
     function previewText(text, limit) {
       var value = text === null || text === undefined ? '' : String(text)
       return value.length > limit ? value.slice(0, limit) + '…' : value
@@ -374,102 +274,302 @@ window.__ModuleLoader__.load({
       return [previewText(before, 60) + ' → ' + previewText(after, 60)]
     }
 
-    var PANEL_ID = '__dsh_localstate_panel'
+    // ────────────────────────────────────────────────────────────────────────
+    // Notification + change-panel surface.
+    //
+    // DSH renders plugin toasts and dialogs on the frame-wide `shell.overlay`
+    // seat (the same layer the host's own Toast / Modal use) — there is no
+    // imperative toast/dialog service to call. So instead of appending a private
+    // DOM stack to `document.body` and hand-managing z-index, a small store
+    // holds the notices and a single React entry registered into `shell.overlay`
+    // renders them. The sync engine drives `notice()` / `openChangePanel()` as
+    // before; only the presentation lives in the overlay now.
+    // ────────────────────────────────────────────────────────────────────────
+    var OVERLAY_ID = 'localstate-sync.overlay'
+    var toastSeq = 0
+    var overlayStore = {
+      toasts: [],
+      panel: null,
+      listeners: [],
+      subscribe: function (listener) {
+        overlayStore.listeners.push(listener)
+        return function () {
+          var at = overlayStore.listeners.indexOf(listener)
+          if (at !== -1) overlayStore.listeners.splice(at, 1)
+        }
+      },
+      emit: function () {
+        var list = overlayStore.listeners.slice()
+        for (var index = 0; index < list.length; index += 1) {
+          try {
+            list[index]()
+          } catch (error) {
+            // A broken subscriber must not stop the others.
+          }
+        }
+      },
+    }
+
+    function dismissToast(id) {
+      var list = overlayStore.toasts
+      for (var index = 0; index < list.length; index += 1) {
+        if (list[index].id !== id) continue
+        if (list[index].timer !== undefined) clearTimeout(list[index].timer)
+        list.splice(index, 1)
+        overlayStore.emit()
+        return
+      }
+    }
+
+    function scheduleDismiss(entry) {
+      if (entry.kind === 'error') return
+      if (entry.timer !== undefined) clearTimeout(entry.timer)
+      entry.timer = setTimeout(function () {
+        dismissToast(entry.id)
+      }, entry.ms === undefined ? 8000 : entry.ms)
+      // Browser timers are numbers with no unref; a Node test timer can unref so an
+      // auto-dismiss never holds the process open after the checks finish.
+      if (entry.timer && typeof entry.timer.unref === 'function') entry.timer.unref()
+    }
+
+    /**
+     * A synced value moved on: the write was refused, so say so instead of
+     * silently keeping the local copy. Repeats for the same key reuse the card,
+     * which is what keeps a stale tab from spamming the corner.
+     */
+    function notice(kind, text, options) {
+      var settings = options || {}
+      var key = typeof settings.key === 'string' ? settings.key : null
+      publishNotice({ kind: kind, text: text, at: Date.now(), key: key })
+      try {
+        var toasts = overlayStore.toasts
+        if (key !== null) {
+          for (var index = 0; index < toasts.length; index += 1) {
+            if (toasts[index].key !== key) continue
+            // Same key, newer message: update the card in place instead of
+            // stacking, and swap the buttons so an overwrite confirmation never
+            // keeps offering the actions that just ran.
+            toasts[index].kind = kind
+            toasts[index].text = text
+            toasts[index].actions = Array.isArray(settings.actions) ? settings.actions : []
+            toasts[index].dismissLabel = settings.dismissLabel || '×'
+            toasts[index].ms = settings.ms
+            overlayStore.emit()
+            return
+          }
+        }
+        var entry = {
+          id: 'toast-' + (toastSeq += 1),
+          kind: kind,
+          text: text,
+          key: key,
+          actions: Array.isArray(settings.actions) ? settings.actions : [],
+          dismissLabel: settings.dismissLabel || '×',
+          ms: settings.ms,
+          timer: undefined,
+        }
+        toasts.push(entry)
+        scheduleDismiss(entry)
+        overlayStore.emit()
+      } catch (error) {
+        // Notices are cosmetic; capture must keep working without them.
+      }
+    }
 
     /** The "which keys changed" panel behind the pull notice. */
     function openChangePanel(entries, language) {
-      var text = noticeText(language)
       try {
-        if (typeof document === 'undefined' || !document.body) return
-        var stale = document.getElementById(PANEL_ID)
-        if (stale) stale.remove()
-        var overlay = document.createElement('div')
-        overlay.id = PANEL_ID
-        overlay.style.cssText =
-          'position:fixed;inset:0;z-index:2147483001;background:rgba(0,0,0,.34);display:flex;align-items:center;justify-content:center;padding:24px'
-        var panel = document.createElement('div')
-        panel.style.cssText =
-          'pointer-events:auto;width:min(720px,100%);max-height:80vh;overflow:auto;border-radius:14px;padding:18px 20px;font-size:13px;line-height:1.5;' +
-          'background:var(--dsw-alias-bg-overlay,#ffffff);color:var(--dsw-alias-label-primary,#111111);' +
-          'border:1px solid var(--dsw-alias-border-l2,rgba(0,0,0,.12));box-shadow:0 12px 40px rgba(0,0,0,.24)'
-        var head = document.createElement('div')
-        head.style.cssText = 'display:flex;align-items:center;gap:12px;margin-bottom:4px'
-        var title = document.createElement('strong')
-        title.style.cssText = 'flex:1;font-size:15px'
-        title.textContent = text.pullTitle
-        head.appendChild(title)
-        var closeButton = document.createElement('button')
-        closeButton.type = 'button'
-        closeButton.textContent = text.close
-        closeButton.style.cssText =
-          'appearance:none;border:0;background:transparent;cursor:pointer;font:inherit;color:var(--dsw-alias-brand-primary,#1f8a70)'
-        head.appendChild(closeButton)
-        panel.appendChild(head)
-        var lead = document.createElement('p')
-        lead.style.cssText = 'margin:0 0 12px;color:var(--dsw-alias-label-secondary,#555555)'
-        lead.textContent = text.pullLead
-        panel.appendChild(lead)
-        var list = Array.isArray(entries) ? entries : []
-        for (var index = 0; index < list.length; index += 1) {
-          var row = list[index]
-          if (!Array.isArray(row) || typeof row[0] !== 'string') continue
-          var item = document.createElement('div')
-          item.style.cssText =
-            'padding:10px 0;border-top:1px solid var(--dsw-alias-border-l1,rgba(0,0,0,.08))'
-          var keyLine = document.createElement('div')
-          keyLine.style.cssText = 'display:flex;align-items:baseline;gap:8px;margin-bottom:4px'
-          var keyName = document.createElement('code')
-          keyName.style.cssText = 'font-size:12px;word-break:break-all'
-          keyName.textContent = row[0]
-          keyLine.appendChild(keyName)
-          if (typeof row[1] === 'number') {
-            var badge = document.createElement('span')
-            badge.style.cssText =
-              'font-size:11px;padding:1px 6px;border-radius:999px;white-space:nowrap;' +
-              'background:var(--dsw-alias-bg-layer-2,rgba(0,0,0,.05));color:var(--dsw-alias-label-secondary,#555555)'
-            badge.textContent = 'r' + row[1]
-            keyLine.appendChild(badge)
-          }
-          item.appendChild(keyLine)
-          var lines = changeLines(row[2] === undefined ? null : row[2], row[3] === undefined ? null : row[3], text)
-          for (var cursor = 0; cursor < lines.length; cursor += 1) {
-            var line = document.createElement('div')
-            line.style.cssText =
-              'font-size:12px;color:var(--dsw-alias-label-secondary,#555555);word-break:break-word;margin-top:2px'
-            line.textContent = lines[cursor]
-            item.appendChild(line)
-          }
-          panel.appendChild(item)
-        }
-        function close() {
-          try {
-            overlay.remove()
-          } catch (error) {
-            // Already closed.
-          }
-          try {
-            document.removeEventListener('keydown', onKey)
-          } catch (error) {
-            // Nothing to detach.
-          }
-        }
-        function onKey(event) {
-          if (event && event.key === 'Escape') close()
-        }
-        closeButton.addEventListener('click', close)
-        overlay.addEventListener('click', function (event) {
-          if (event && event.target === overlay) close()
-        })
-        try {
-          document.addEventListener('keydown', onKey)
-        } catch (error) {
-          // Escape handling is a convenience.
-        }
-        overlay.appendChild(panel)
-        document.body.appendChild(overlay)
+        overlayStore.panel = { entries: Array.isArray(entries) ? entries : [], language: language }
+        overlayStore.emit()
       } catch (error) {
         // The panel is cosmetic; capture must keep working without it.
       }
+    }
+
+    function closeChangePanel() {
+      try {
+        overlayStore.panel = null
+        overlayStore.emit()
+      } catch (error) {
+        // Nothing to close.
+      }
+    }
+
+    // Mirrors the host Toast / Modal visuals (rounded elevated card, tone accent,
+    // action buttons; modal with focus + Escape + backdrop dismiss) using only
+    // theme tokens and a plugin class prefix, per the harness UI rules.
+    var OVERLAY_CSS = [
+      '.lssync-toasts{position:fixed;right:16px;bottom:16px;z-index:2147483000;display:flex;flex-direction:column;gap:8px;max-width:420px;pointer-events:none;font-family:inherit}',
+      '.lssync-toast{pointer-events:auto;display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:10px;font-size:13px;line-height:1.45;' +
+        'background:var(--dsw-alias-bg-overlay,#ffffff);color:var(--dsw-alias-label-primary,#111111);' +
+        'border:1px solid var(--dsw-alias-border-l2,rgba(0,0,0,.12));border-left:3px solid var(--dsw-alias-brand-primary,#1f8a70);box-shadow:0 6px 24px rgba(0,0,0,.16)}',
+      '.lssync-toast[data-kind="error"]{border-left-color:var(--dsw-alias-state-error,#b3261e)}',
+      '.lssync-toast-label{flex:1}',
+      '.lssync-toast-btn{appearance:none;border:0;background:transparent;cursor:pointer;padding:0 2px;font:inherit;white-space:nowrap;color:var(--dsw-alias-brand-primary,#1f8a70)}',
+      '.lssync-toast-btn[data-tone="danger"]{color:var(--dsw-alias-state-error,#b3261e)}',
+      '.lssync-scrim{position:fixed;inset:0;z-index:2147483001;background:rgba(0,0,0,.34);display:flex;align-items:center;justify-content:center;padding:24px}',
+      '.lssync-modal{pointer-events:auto;width:min(720px,100%);max-height:80vh;overflow:auto;border-radius:14px;padding:18px 20px;font-size:13px;line-height:1.5;' +
+        'background:var(--dsw-alias-bg-overlay,#ffffff);color:var(--dsw-alias-label-primary,#111111);' +
+        'border:1px solid var(--dsw-alias-border-l2,rgba(0,0,0,.12));box-shadow:0 12px 40px rgba(0,0,0,.24)}',
+      '.lssync-modal-head{display:flex;align-items:center;gap:12px;margin-bottom:4px}',
+      '.lssync-modal-title{flex:1;font-size:15px}',
+      '.lssync-modal-close{appearance:none;border:0;background:transparent;cursor:pointer;font:inherit;color:var(--dsw-alias-brand-primary,#1f8a70)}',
+      '.lssync-modal-lead{margin:0 0 12px;color:var(--dsw-alias-label-secondary,#555555)}',
+      '.lssync-modal-row{padding:10px 0;border-top:1px solid var(--dsw-alias-border-l1,rgba(0,0,0,.08))}',
+      '.lssync-modal-keyline{display:flex;align-items:baseline;gap:8px;margin-bottom:4px}',
+      '.lssync-modal-key{font-size:12px;word-break:break-all}',
+      '.lssync-modal-rev{font-size:11px;padding:1px 6px;border-radius:999px;white-space:nowrap;background:var(--dsw-alias-bg-layer-2,rgba(0,0,0,.05));color:var(--dsw-alias-label-secondary,#555555)}',
+      '.lssync-modal-line{font-size:12px;color:var(--dsw-alias-label-secondary,#555555);word-break:break-word;margin-top:2px}',
+    ].join('')
+
+    function createOverlayEntry(React) {
+      var h = React.createElement
+
+      function ToastCard(props) {
+        var toast = props.toast
+        var label = toast.text
+        var buttons = []
+        for (var index = 0; index < toast.actions.length; index += 1) {
+          var action = toast.actions[index]
+          if (action === null || typeof action !== 'object') continue
+          buttons.push(
+            (function (callback) {
+              return h(
+                'button',
+                {
+                  key: 'a' + index,
+                  type: 'button',
+                  className: 'lssync-toast-btn',
+                  onClick: function () {
+                    try {
+                      if (typeof callback === 'function') callback()
+                    } catch (error) {
+                      // A broken action must not keep the toast alive.
+                    }
+                  },
+                },
+                action.label,
+              )
+            })(typeof action.run === 'function' ? action.run : function () {}),
+          )
+        }
+        return h(
+          'div',
+          { className: 'lssync-toast', 'data-kind': toast.kind, role: toast.kind === 'error' ? 'alert' : 'status' },
+          h('span', { className: 'lssync-toast-label' }, label),
+          buttons,
+          h('button', {
+            type: 'button',
+            className: 'lssync-toast-btn',
+            onClick: function () {
+              dismissToast(toast.id)
+            },
+          }, toast.dismissLabel),
+        )
+      }
+
+      function ChangePanel(props) {
+        var panel = props.panel
+        var text = noticeText(panel.language)
+        var modalRef = React.useRef(null)
+        React.useEffect(function () {
+          var node = modalRef.current
+          if (node && typeof node.focus === 'function') node.focus()
+          function onKey(event) {
+            if (event && event.key === 'Escape') closeChangePanel()
+          }
+          try {
+            document.addEventListener('keydown', onKey)
+          } catch (error) {
+            // Escape handling is a convenience.
+          }
+          return function () {
+            try {
+              document.removeEventListener('keydown', onKey)
+            } catch (error) {
+              // Nothing to detach.
+            }
+          }
+        }, [])
+        var rows = []
+        for (var index = 0; index < panel.entries.length; index += 1) {
+          var row = panel.entries[index]
+          if (!Array.isArray(row) || typeof row[0] !== 'string') continue
+          var lines = changeLines(row[2] === undefined ? null : row[2], row[3] === undefined ? null : row[3], text)
+          var lineEls = []
+          for (var cursor = 0; cursor < lines.length; cursor += 1) {
+            lineEls.push(h('div', { className: 'lssync-modal-line', key: 'l' + cursor }, lines[cursor]))
+          }
+          rows.push(
+            h(
+              'div',
+              { className: 'lssync-modal-row', key: row[0] },
+              h(
+                'div',
+                { className: 'lssync-modal-keyline' },
+                h('code', { className: 'lssync-modal-key' }, row[0]),
+                typeof row[1] === 'number' ? h('span', { className: 'lssync-modal-rev' }, 'r' + row[1]) : null,
+              ),
+              lineEls,
+            ),
+          )
+        }
+        return h(
+          'div',
+          {
+            className: 'lssync-scrim',
+            onClick: function (event) {
+              if (event && event.target === event.currentTarget) closeChangePanel()
+            },
+          },
+          h(
+            'div',
+            { className: 'lssync-modal', role: 'dialog', 'aria-modal': 'true', tabIndex: -1, ref: modalRef },
+            h(
+              'div',
+              { className: 'lssync-modal-head' },
+              h('strong', { className: 'lssync-modal-title' }, text.pullTitle),
+              h('button', {
+                type: 'button',
+                className: 'lssync-modal-close',
+                onClick: closeChangePanel,
+              }, text.close),
+            ),
+            h('p', { className: 'lssync-modal-lead' }, text.pullLead),
+            rows,
+          ),
+        )
+      }
+
+      function LocalStateOverlay() {
+        var tick = React.useState(0)[1]
+        React.useEffect(function () {
+          return overlayStore.subscribe(function () {
+            tick(function (value) {
+              return value + 1
+            })
+          })
+        }, [])
+        var toasts = overlayStore.toasts
+        var panel = overlayStore.panel
+        return h(
+          React.Fragment,
+          null,
+          h('style', { dangerouslySetInnerHTML: { __html: OVERLAY_CSS } }),
+          toasts.length === 0
+            ? null
+            : h(
+                'div',
+                { className: 'lssync-toasts' },
+                toasts.map(function (toast) {
+                  return h(ToastCard, { key: toast.id, toast: toast })
+                }),
+              ),
+          panel === null ? null : h(ChangePanel, { key: 'panel', panel: panel }),
+        )
+      }
+
+      return LocalStateOverlay
     }
 
     function configUrl() {
@@ -664,6 +764,21 @@ window.__ModuleLoader__.load({
           info.body.fields.forEach(function (field) {
             fields[field.name] = field
           })
+          // An emptied number box lands as `undefined`, which JSON drops entirely, so
+          // a "cleared" numeric field could never round-trip. Express clearing as a
+          // reset to the field's default; anything left undefined is not sent at all.
+          Object.keys(payload).forEach(function (name) {
+            if (payload[name] !== undefined) return
+            var field = fields[name]
+            if (field !== undefined && field.default !== undefined) payload[name] = field.default
+          })
+          Object.keys(payload).forEach(function (name) {
+            if (payload[name] === undefined) delete payload[name]
+          })
+          if (Object.keys(payload).length === 0) {
+            say(text.pending, false)
+            return
+          }
           var invalid = Object.keys(payload).some(function (name) {
             var field = fields[name]
             return field !== undefined && field.kind === 'number' && (typeof payload[name] !== 'number' || isNaN(payload[name]))
@@ -885,12 +1000,30 @@ window.__ModuleLoader__.load({
       })
     }
 
+    /** Mount the toast stack + change panel on the frame-wide overlay seat. */
+    function registerOverlay(ctx, React) {
+      var slots = service(ctx, 'slots')
+      if (slots === undefined || slots === null || typeof slots.register !== 'function') return
+      var Overlay = createOverlayEntry(React)
+      slots.inject('shell.overlay', function () {
+        return slots.register(
+          {
+            name: 'shell.overlay',
+            id: OVERLAY_ID,
+            order: 20,
+          },
+          Overlay,
+        )
+      })
+    }
+
     return {
       apply: function (ctx) {
         if (typeof window === 'undefined') return
         // `ctx.slots` is a guarded service read: touching an undeclared service
         // throws, so ask the context for it explicitly and fall back quietly.
         registerConfigCell(ctx, React)
+        registerOverlay(ctx, React)
         if (typeof localStorage === 'undefined') return
         if (location.protocol === 'file:') return
         if (window[GUARD] === true) return
@@ -1057,7 +1190,7 @@ window.__ModuleLoader__.load({
                 },
                 {
                   label: failure.overwrite,
-                  tone: 'var(--dsw-alias-state-error,#b3261e)',
+                  tone: 'danger',
                   run: function (key) {
                     return function () {
                       forceKey(key)

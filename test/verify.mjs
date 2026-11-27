@@ -422,6 +422,7 @@ check('the same stalled revision is announced once, not on every write', repeate
 
 // ---------------------------------------------------------------- boot notice
 const bootSites = new Map()
+const bootPosts = []
 let bootDefinition
 const bootGlobals = {
   Storage: function Storage() {},
@@ -445,7 +446,13 @@ const bootGlobals = {
   clearTimeout,
   addEventListener() {},
   removeEventListener() {},
-  fetch: async () => ({ ok: true, status: 200, json: async () => ({ ok: true, seq: 5, keys: [], truncated: false }) }),
+  fetch: async (url, init) => {
+    if ((init?.method ?? 'GET') === 'POST') {
+      bootPosts.push(JSON.parse(init.body))
+      return { ok: true, status: 200, json: async () => ({ ok: true, seq: 6, accepted: [['dsh.a', 6]], conflicts: [] }) }
+    }
+    return { ok: true, status: 200, json: async () => ({ ok: true, seq: 5, keys: [], truncated: false }) }
+  },
 }
 bootGlobals.Storage.prototype = {
   getItem: (key) => (bootSites.has(key) ? bootSites.get(key) : null),
@@ -463,6 +470,20 @@ const bootBundle = bootDefinition.factory((name) => {
 bootBundle.apply({ locale: { getSnapshot: () => ({ active: 'en' }) }, effect(fn) { fn(); return () => {} } })
 const bootNotices = bootGlobals.__DSH_LOCALSTATE_NOTICES__ ?? []
 check('a boot that replaced values announces the newer synced revision', bootNotices.some((entry) => entry.kind === 'info' && entry.text.includes('3')), bootNotices)
+
+// The seeder/snapshot restores dsh.a at revision 5. A write to that key must be
+// guarded by base 5 (the revision it was just built on), not a stale/absent base —
+// otherwise editing a freshly-restored key trips a spurious conflict on flush.
+bootGlobals.localStorage.setItem('dsh.a', 'edited-after-boot')
+await sleep(520)
+const bootPost = bootPosts[0]
+check('a write to a freshly-restored key carries the applied revision as its base', bootPost !== undefined && bootPost.base?.['dsh.a'] === 5, bootPost)
+check('the restored key is sent as a guarded change', bootPost !== undefined && bootPost.changes?.['dsh.a'] === 'edited-after-boot', bootPost?.changes)
+
+// The toast stack + change panel now mount on the built-in shell.overlay seat
+// instead of a private DOM stack appended to document.body.
+check('client mounts its overlay on the built-in shell.overlay seat', clientText.includes("slots.inject('shell.overlay'") && clientText.includes("name: 'shell.overlay'"), 'overlay registration')
+check('overlay no longer appends a private toast host to document.body', !clientText.includes('__dsh_localstate_toasts') && !clientText.includes('NOTICE_HOST_ID'), 'no body-appended toast host')
 
 rmSync(home, { recursive: true, force: true })
 const failed = checks.filter((entry) => entry.ok !== true)
